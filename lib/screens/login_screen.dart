@@ -27,6 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // 3.3 Timer para detener la animación de mirar hacia abajo después de 1 segundo
   Timer? _typingDebounce;
+  bool _rememberMe = false;
+  bool _isRememberLocked = false; // Bloquea la interacción del checkbox
 
   //2.1 Crear las variables para FocusNode
   final _emailFocus = FocusNode();
@@ -51,6 +53,25 @@ class _LoginScreenState extends State<LoginScreen> {
       r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$',
     );
     return re.hasMatch(pass);
+  }
+
+  //Bloquear los clicks rápidos
+  void _toggleRememberMe() {
+    if (_isRememberLocked) return;
+
+    setState(() {
+      _isRememberLocked = true;
+      _rememberMe = !_rememberMe;
+    });
+
+    // bloquea despues de 175 ms
+    Future.delayed(const Duration(milliseconds: 175), () {
+      if (mounted) {
+        setState(() {
+          _isRememberLocked = false;
+        });
+      }
+    });
   }
 
   //4.4 Dar Accion al boton
@@ -236,16 +257,35 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                SizedBox(height: 10),
-                //4.12 texto de olvido de contraseña
-                SizedBox(
-                  width: size.width,
-                  child: const Text(
-                    'Forgot your password?',
-                    //4.13 alinear a la derecha
-                    textAlign: TextAlign.right,
-                    style: TextStyle(decoration: TextDecoration.underline),
-                  ),
+                //4.12 texto de remember me a la izquierda y olvido de contraseña a la derecha
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IgnorePointer(
+                      ignoring: _isRememberLocked, // Bloquea interacción si está animando
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: _toggleRememberMe,
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _rememberMe,
+                              onChanged: _isRememberLocked
+                                  ? null
+                                  : (_) => _toggleRememberMe(),
+                            ),
+                            const Text('Remember me'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Forgot your password?',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(decoration: TextDecoration.underline),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 //4.13 boton de login
