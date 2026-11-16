@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:rive/rive.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:login_bear_animation/screens/register_screen.dart';
 
 import 'dart:async'; //3.1 importar el timer
 
@@ -75,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   //4.4 Dar Accion al boton
-  void _onLogin() {
+  Future<void> _onLogin() async {
     //4.5 De lo que escribio el usuario quitar espacios en blanco
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text.trim();
@@ -97,12 +99,91 @@ class _LoginScreenState extends State<LoginScreen> {
     _isHandsUp?.change(false);
     _numLook?.value = 50.0; // mirada neutra
 
-    //4.9 Activar triggers
+    //4.9 Activar triggers con Firebase Auth
     if (eError == null && pError == null) {
-      _trigSuccess?.fire();
+      try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: pass,
+        );
+        _trigSuccess?.fire();
+      } on FirebaseAuthException catch (e) {
+        _trigFail?.fire();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.message ?? 'Error al iniciar sesión'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
     } else {
       _trigFail?.fire();
     }
+  }
+
+  Future<void> _onForgotPassword() async {
+    final email = _emailCtrl.text.trim();
+
+    if (!isValidEmail(email)) {
+      setState(() {
+        emailError = 'Ingresa un correo válido para recuperar tu contraseña';
+      });
+      _trigFail?.fire();
+      return;
+    }
+
+    setState(() {
+      emailError = null;
+    });
+
+    FocusScope.of(context).unfocus();
+    _typingDebounce?.cancel();
+    _isChecking?.change(false);
+    _isHandsUp?.change(false);
+    _numLook?.value = 50.0;
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _trigSuccess?.fire();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Correo de recuperación enviado a $email. Revisa tu bandeja o spam.',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      _trigFail?.fire();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.message ?? 'No se pudo enviar el correo de recuperación',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _onSignOut() async {
+    await FirebaseAuth.instance.signOut();
+    _emailCtrl.clear();
+    _passCtrl.clear();
+    setState(() {
+      emailError = null;
+      passError = null;
+      _obscure = true;
+    });
+    _isChecking?.change(false);
+    _isHandsUp?.change(false);
+    _numLook?.value = 50.0;
   }
 
   //2.2 Listeners (Oyentes/Chismosos)
@@ -163,6 +244,46 @@ class _LoginScreenState extends State<LoginScreen> {
                       _numLook = _controller!.findSMI('numLook');
                     },
                   ),
+                ),
+                // Indicador de sesión activa con authStateChanges() y botón Sign Out
+                StreamBuilder<User?>(
+                  stream: FirebaseAuth.instance.authStateChanges(),
+                  builder: (context, snapshot) {
+                    final user = snapshot.data;
+                    if (user == null) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Sesión activa: ${user.email}',
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _onSignOut,
+                            icon: const Icon(Icons.logout, size: 18),
+                            label: const Text('Sign Out'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 //Para separar espacios
                 SizedBox(height: 10),
@@ -280,10 +401,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    const Text(
-                      'Forgot your password?',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(decoration: TextDecoration.underline),
+                    InkWell(
+                      onTap: _onForgotPassword,
+                      child: const Text(
+                        'Forgot your password?',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(decoration: TextDecoration.underline),
+                      ),
                     ),
                   ],
                 ),
@@ -307,7 +431,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const Text("Don't Have an Account?"),
                       TextButton(
-                        onPressed: () {},
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RegisterScreen(),
+                            ),
+                          );
+                          // Si el usuario se registró con éxito, el osito celebra al volver
+                          if (FirebaseAuth.instance.currentUser != null) {
+                            _trigSuccess?.fire();
+                          }
+                        },
                         child: Text(
                           'Sign Up',
                           style: TextStyle(
