@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rive/rive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:login_bear_animation/screens/register_screen.dart';
+import 'package:login_bear_animation/screens/products_screens.dart';
 
 import 'dart:async'; //3.1 importar el timer
 
@@ -43,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // 4.2 MOSTRAR MENSAJES DE ERROR EL LA UI
   String? emailError;
   String? passError;
+  bool _isLoading = false;
 
   //4.3 validar el email y la contraseña
   bool isValidEmail(String email) {
@@ -99,27 +101,49 @@ class _LoginScreenState extends State<LoginScreen> {
     _isHandsUp?.change(false);
     _numLook?.value = 50.0; // mirada neutra
 
-    //4.9 Activar triggers con Firebase Auth
-    if (eError == null && pError == null) {
-      try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: pass,
-        );
-        _trigSuccess?.fire();
-      } on FirebaseAuthException catch (e) {
-        _trigFail?.fire();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message ?? 'Error al iniciar sesión'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
-      }
-    } else {
+    //4.9 Si algún campo tiene formato inválido, activar fallo y detener aquí
+    if (eError != null || pError != null) {
       _trigFail?.fire();
+      return;
+    }
+
+    //5.4 Activar el CircularProgressIndicator
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await Future.delayed(const Duration(seconds: 2));
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: pass,
+      );
+
+      setState(() {
+        _isLoading = false;
+      });
+      _trigSuccess?.fire();
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ProductsScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      //Si Firebase rechaza el login, apagar loading, mostrar al osito triste y notificar sin marcar campo específico
+      setState(() {
+        _isLoading = false;
+      });
+      _trigFail?.fire();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message ?? 'Error al iniciar sesión'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -421,7 +445,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   onPressed: _onLogin,
-                  child: Text('Login', style: TextStyle(color: Colors.white)),
+                  //5.9 Mostrar CircularProgressIndicator si está cargando, o el texto Login
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text('Login', style: TextStyle(color: Colors.white)),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
